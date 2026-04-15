@@ -1,23 +1,17 @@
-import { emitter } from "./modules/event-emitter.js";
-import { state } from "./state.js";
-import { DataService } from "./modules/data-service.js";
-import { render } from "./render.js";
+import { emitter } from './emitter.js';
+import { state } from './state.js';
+import { render } from './render.js';
+import { DataService } from './data-service.js';
 
-emitter.on("registration:dispatch", (payload) => {
-  DataService.createRegistration(payload);
+emitter.on('users:formError', (msg) => {
+  state.formError = msg;
+  render(); 
 });
 
-emitter.on("registration:success", (reg) => {
-  state.submitting = false;
-  state.confirmation = reg;
-  state.error = null;
+emitter.on('users:submit', (payload) => {
+  state.formError = null; 
+  DataService.registerEvent(payload);
   render();
 });
 
-emitter.on("registration:error", () => {
-  state.submitting = false;
-  render();
-});
-
-// Boot
 render();

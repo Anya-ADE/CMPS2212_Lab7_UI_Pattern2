@@ -3,128 +3,57 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
+	"log"
 	"net/http"
-	"os"
-	"sync"
-	"time"
 )
 
 type Registration struct {
-	ID        int    `json:"id"`
-	EventDate string `json:"eventDate"`
-	Tickets   int    `json:"tickets"`
-	CreatedAt string `json:"createdAt"`
+	Date    string `json:"date"`
+	Tickets int    `json:"tickets"`
+	Terms   bool   `json:"terms"`
 }
 
-type application struct {
-	logger        *slog.Logger
-	mu            sync.Mutex
-	registrations []Registration
-	nextID        int
+type Response struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
-}
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
-}
-
-func (app *application) createRegistration(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		EventDate string `json:"eventDate"`
-		Tickets   int    `json:"tickets"`
-		Terms     bool   `json:"terms"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if r.Method == "OPTIONS" {
 		return
 	}
 
-	// Validate event date
-	if input.EventDate == "" {
-		writeError(w, http.StatusUnprocessableEntity, "eventDate is required")
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	parsed, err := time.Parse("2006-01-02", input.EventDate)
+
+	var reg Registration
+	err := json.NewDecoder(r.Body).Decode(&reg)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "eventDate must be YYYY-MM-DD")
-		return
-	}
-	today := time.Now().Truncate(24 * time.Hour)
-	if !parsed.After(today) {
-		writeError(w, http.StatusUnprocessableEntity, "eventDate must be a future date")
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// Validate tickets
-	if input.Tickets < 1 || input.Tickets > 5 {
-		writeError(w, http.StatusUnprocessableEntity, "tickets must be between 1 and 5")
-		return
-	}
+	fmt.Printf("Received Registration: Date=%s, Tickets=%d, AcceptedTerms=%v\n", reg.Date, reg.Tickets, reg.Terms)
 
-	// Validate terms
-	if !input.Terms {
-		writeError(w, http.StatusUnprocessableEntity, "terms must be accepted")
-		return
-	}
-
-	app.mu.Lock()
-	app.nextID++
-	reg := Registration{
-		ID:        app.nextID,
-		EventDate: input.EventDate,
-		Tickets:   input.Tickets,
-		CreatedAt: time.Now().Format(time.RFC3339),
-	}
-	app.registrations = append(app.registrations, reg)
-	app.mu.Unlock()
-
-	app.logger.Info("registration created",
-		"id", reg.ID,
-		"eventDate", reg.EventDate,
-		"tickets", reg.Tickets,
-	)
-
-	writeJSON(w, http.StatusCreated, reg)
-}
-
-func (app *application) listRegistrations(w http.ResponseWriter, r *http.Request) {
-	app.mu.Lock()
-	regs := make([]Registration, len(app.registrations))
-	copy(regs, app.registrations)
-	app.mu.Unlock()
-
-	writeJSON(w, http.StatusOK, regs)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(Response{
+		Status:  "success",
+		Message: "Registration received successfully!",
+	})
 }
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	fs := http.FileServer(http.Dir("./"))
+	http.Handle("/", fs)
 
-	app := &application{
-		logger:        logger,
-		registrations: []Registration{},
-		nextID:        0,
-	}
+	http.HandleFunc("/api/register", registerHandler)
 
-	mux := http.NewServeMux()
-
-	// API routes
-	mux.HandleFunc("POST /api/registrations", app.createRegistration)
-	mux.HandleFunc("GET /api/registrations", app.listRegistrations)
-
-	fs := http.FileServer(http.Dir("./static"))
-	mux.Handle("/", fs)
-
-	addr := ":4000"
-	logger.Info("starting server", "addr", fmt.Sprintf("http://localhost%s", addr))
-
-	err := http.ListenAndServe(addr, mux)
-	logger.Error(err.Error())
-	os.Exit(1)
+	fmt.Println("Server starting at http://localhost:4000")
+	log.Fatal(http.ListenAndServe(":4000", nil))
 }
