@@ -4,9 +4,9 @@ import { state } from './state.js';
 function validate(payload) {
   const today = new Date().toISOString().split('T')[0];
   
-  if (payload.date <= today) return 'Date must be in the future'; // 
-  if (payload.tickets < 1 || payload.tickets > 5) return 'Tickets must be between 1 and 5'; // 
-  if (!payload.terms) return 'You must agree to the Terms & Conditions'; // 
+  if (payload.date <= today) return 'Date must be in the future'; 
+  if (payload.tickets < 1 || payload.tickets > 5) return 'Tickets must be between 1 and 5'; 
+  if (!payload.terms) return 'You must agree to the Terms & Conditions';
   
   return null;
 }
